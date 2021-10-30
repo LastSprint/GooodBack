@@ -28,6 +28,7 @@ type Service interface {
 	// GetTokens check if user already exist and if it is will return a token pair
 	// if not will create new user and return their tokens
 	GetTokens(userId string, provider string) (*oauth2.Token, error)
+	RefreshAccessToken(refreshTokenStr string) (string, error)
 }
 
 const (
@@ -36,7 +37,7 @@ const (
 
 type Api struct {
 	Providers map[string]OAuth2Provider
-	Srv Service
+	Srv       Service
 }
 
 func (api *Api) Start(router chi.Router) {
@@ -44,6 +45,8 @@ func (api *Api) Start(router chi.Router) {
 		r.Get("/thridparty/{provider}", api.handleThirdPartyAuthIntent)
 		r.Get("/thridparty/redirect", api.handleThirdPartyServiceCodeRedirect)
 		r.Post("/thirparty/code", api.handleThirdPartyCodeExchange)
+
+		r.Post("/refresh", api.handleAccessTokenRefresh)
 	})
 }
 
@@ -100,6 +103,8 @@ func (api *Api) handleThirdPartyServiceCodeRedirect(w http.ResponseWriter, r *ht
 		return
 	}
 
+	// FIXME: Write token pair in cookies
+
 	if err = json.NewEncoder(w).Encode(tokens); err != nil {
 		log.Printf("Can't serialize aouth tokens to JSON with error \"%s\"", err.Error())
 		http.Error(w, "Something went wrong", http.StatusInternalServerError)
@@ -130,7 +135,32 @@ func (api *Api) handleThirdPartyCodeExchange(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-func (api *Api) getUserTokens(oauth2Code, oauth2ProviderName string) ( *oauth2.Token, error) {
+func (api *Api) handleAccessTokenRefresh(w http.ResponseWriter, r *http.Request) {
+	refreshToken := struct {
+		RefreshToken string `json:"refresh_token"`
+	}{}
+
+	if err := json.NewDecoder(r.Body).Decode(&refreshToken); err != nil {
+		http.Error(w, "can't parse request", http.StatusBadRequest)
+		return
+	}
+
+	newToken, err := api.Srv.RefreshAccessToken(refreshToken.RefreshToken)
+
+	if err != nil {
+		log.Printf("[ERR] while refreshing token %s", err.Error())
+		http.Error(w, "can't parse request", http.StatusBadRequest)
+		return
+	}
+
+	if err = json.NewEncoder(w).Encode(newToken); err != nil {
+		log.Printf("[ERR] couldn't encode token to json with error %s", err.Error())
+		http.Error(w, "something went wrong", http.StatusInternalServerError)
+		return
+	}
+}
+
+func (api *Api) getUserTokens(oauth2Code, oauth2ProviderName string) (*oauth2.Token, error) {
 	provider, ok := api.Providers[oauth2ProviderName]
 
 	if !ok {
@@ -140,7 +170,7 @@ func (api *Api) getUserTokens(oauth2Code, oauth2ProviderName string) ( *oauth2.T
 	token, err := provider.ExchangeAuthCode(oauth2Code)
 
 	if err != nil {
-		log.Printf("[ERR] provider \"%s\" couldn't exchange code \"%s\" with err \"%s\"",oauth2ProviderName, oauth2Code, err.Error())
+		log.Printf("[ERR] provider \"%s\" couldn't exchange code \"%s\" with err \"%s\"", oauth2ProviderName, oauth2Code, err.Error())
 		return nil, fmt.Errorf("couldn't exchange code")
 	}
 
