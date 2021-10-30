@@ -91,7 +91,7 @@ func (api *Api) handleThirdPartyServiceCodeRedirect(w http.ResponseWriter, r *ht
 
 	// FIXME: Add seed validation
 
-	providerName := chi.URLParam(r, "state")
+	providerName := r.URL.Query().Get("state")
 
 	tokens, err := api.getUserTokens(code, providerName)
 
@@ -134,7 +134,7 @@ func (api *Api) getUserTokens(oauth2Code, oauth2ProviderName string) ( *oauth2.T
 	provider, ok := api.Providers[oauth2ProviderName]
 
 	if !ok {
-		return nil, fmt.Errorf("provider \"%s\" not found", provider)
+		return nil, fmt.Errorf("provider \"%s\" not found by name \"%s\"", provider, oauth2ProviderName)
 	}
 
 	token, err := provider.ExchangeAuthCode(oauth2Code)

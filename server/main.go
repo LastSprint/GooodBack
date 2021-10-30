@@ -12,7 +12,8 @@ import (
 
 type config struct {
 
-	BaseUri string `env:"BASE_URI" envDefault:"http://localhost/api/v1"`
+	BaseUri string `env:"BASE_URI" envDefault:"http://localhost"`
+	BasePath string `env:"BASE_PATH" envDefault:"/api/v1"`
 
 	GoogleClientId string `env:"GOOGLE_CLIENT_ID"`
 	GoogleClientSecret string `env:"GOOGLE_CLIENT_SECRET,unset"`
@@ -31,7 +32,7 @@ func main() {
 		auth.GoogleOAuthProvider: &providers.GoogleOAuth2Provider{
 			ClientId:              cfg.GoogleClientId,
 			ClientSecret:          cfg.GoogleClientSecret,
-			ThisServerRedirectURL: cfg.BaseUri + "/auth/thridparty/redirect",
+			ThisServerRedirectURL: cfg.BaseUri + cfg.BasePath + "/auth/thridparty/redirect",
 		},
 	}
 
@@ -41,7 +42,9 @@ func main() {
 
 	r.Use(middleware.Logger)
 
-	authApi.Start(r)
+	r.Route(cfg.BasePath, func(r chi.Router) {
+		authApi.Start(r)
+	})
 
 	log.Fatalln(http.ListenAndServe(":80", r))
 }
