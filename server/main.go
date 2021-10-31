@@ -1,13 +1,18 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"github.com/LastSprint/GooodBack/api/auth"
+	"github.com/LastSprint/GooodBack/api/auth/repos"
+	"github.com/LastSprint/GooodBack/api/feedback"
 	"github.com/LastSprint/GooodBack/common/middlewares"
 	"github.com/LastSprint/GooodBack/oauth/providers"
 	"github.com/caarlos0/env/v6"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -23,6 +28,8 @@ type config struct {
 	JwtAccessTokenSeed        string `env:"JWT_ACCESS_TOKEN_SEED,unset"`
 	JwtRefreshTokenPublicKey  string `env:"JWT_REFRESH_TOKEN_PUBLIC_KEY_PATH,unset"`
 	JwtRefreshTokenPrivateKey string `env:"JWT_REFRESH_TOKEN_PRIVATE_KEY_PATH,unset"`
+
+	AppDataMongoDbConnectionString string `env:"APP_DATA_MONGO_CONNECTION_STRING,unset" envDefault:"mongodb://root:root@localhost:6645"`
 }
 
 func main() {
@@ -61,12 +68,18 @@ func main() {
 		return
 	}
 
-	authApi, err := auth.AssembleApi(provs, access, pubKey, prKey)
+	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(cfg.AppDataMongoDbConnectionString))
+
+	userRepo := &repos.UserRepo{Client: client}
+
+	authApi, err := auth.AssembleApi(userRepo, provs, access, pubKey, prKey)
 
 	if err != nil {
 		log.Fatalln("Error while building Auth API", err.Error())
 		return
 	}
+
+	feedbackApi := feedback.AssembleFeedbackApi(client, userRepo)
 
 	r := chi.NewRouter()
 
@@ -76,6 +89,7 @@ func main() {
 
 	r.Route(cfg.BasePath, func(r chi.Router) {
 		authApi.Start(r)
+		feedbackApi.Start(r)
 	})
 
 	log.Fatalln(http.ListenAndServe(":80", r))

@@ -14,7 +14,7 @@ type UserRepo interface {
 	GetUserById(userOauthId, authProvider string) (*entities.UserInfo, error)
 	CreateUser(userOauthId, authProvider string) (*entities.UserInfo, error)
 
-	SetRefreshTokenForUser(userId string) error
+	SetRefreshTokenForUser(userId, token string) error
 }
 
 type UserService struct {
@@ -66,7 +66,7 @@ func (u *UserService) GetTokens(userId string, provider string) (*oauth2.Token, 
 			return nil, fmt.Errorf("couldn't create token pair with error %w", err)
 		}
 
-		if err = u.Repo.SetRefreshTokenForUser(user.ID.Hex()); err != nil {
+		if err = u.Repo.SetRefreshTokenForUser(user.ID.Hex(), token.RefreshToken); err != nil {
 			return nil, fmt.Errorf("couldn't set refresh token for user %s with error %w", user.ID.Hex(), err)
 		}
 

@@ -2,6 +2,7 @@ package middlewares
 
 import (
 	"context"
+	"github.com/LastSprint/GooodBack/common"
 	"github.com/golang-jwt/jwt/v4"
 	"net/http"
 )
@@ -30,9 +31,13 @@ func (m *AccessTokenValidatorMiddleware) ExtractToken(next http.Handler) http.Ha
 
 		ctx = context.WithValue(ctx, "access_token", token)
 
-		_, err := jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+		claims := common.CustomJWTClaims{}
+
+		_, err := jwt.ParseWithClaims(token, &claims, func(token *jwt.Token) (interface{}, error) {
 			return m.Key, nil
 		})
+
+		ctx = context.WithValue(ctx, ContextKeyUserId, claims.ID)
 
 		ctx = context.WithValue(ctx, "access_token_is_valid", err == nil)
 

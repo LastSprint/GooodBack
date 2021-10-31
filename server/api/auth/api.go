@@ -153,7 +153,12 @@ func (api *Api) handleAccessTokenRefresh(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err = json.NewEncoder(w).Encode(newToken); err != nil {
+	result := oauth2.Token{
+		AccessToken:  newToken,
+		RefreshToken: refreshToken.RefreshToken,
+	}
+
+	if err = json.NewEncoder(w).Encode(result); err != nil {
 		log.Printf("[ERR] couldn't encode token to json with error %s", err.Error())
 		http.Error(w, "something went wrong", http.StatusInternalServerError)
 		return

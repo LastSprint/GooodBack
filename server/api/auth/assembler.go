@@ -1,13 +1,12 @@
 package auth
 
 import (
-	"github.com/LastSprint/GooodBack/api/auth/repos"
 	"github.com/LastSprint/GooodBack/api/auth/services"
 )
 
-func AssembleApi(providers map[string]OAuth2Provider, jwtAccessTokenSeed, jwtRefreshPubKey, jwtRefreshPrKey []byte) (*Api, error) {
+func AssembleApi(userRepo services.UserRepo, providers map[string]OAuth2Provider, jwtAccessTokenSeed, jwtRefreshPubKey, jwtRefreshPrKey []byte) (*Api, error) {
 
-	srv, err := services.InitUserService(&repos.UserRepo{}, jwtAccessTokenSeed, jwtRefreshPubKey, jwtRefreshPrKey)
+	srv, err := services.InitUserService(userRepo, jwtAccessTokenSeed, jwtRefreshPubKey, jwtRefreshPrKey)
 
 	if err != nil {
 		return nil, err
