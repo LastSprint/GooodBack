@@ -18,3 +18,5 @@ server/ec_public.pem
 server/ec_private.pem
 
 mondodb_data/
+
+k8s/
