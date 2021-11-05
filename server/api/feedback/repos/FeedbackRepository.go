@@ -17,7 +17,7 @@ type FeedbackRepository struct {
 	Client *mongo.Client
 }
 
-func (f *FeedbackRepository) CreateNew(message, userId string) error {
+func (f *FeedbackRepository) CreateNew(message, userId string, score int) error {
 	db := f.Client.Database("feedback")
 	col := db.Collection("feedbacks")
 
@@ -30,6 +30,7 @@ func (f *FeedbackRepository) CreateNew(message, userId string) error {
 	entry := entities.Feedback{
 		ID:           primitive.NewObjectID(),
 		Message:      message,
+		Type:         score,
 		CreationDate: primitive.NewDateTimeFromTime(time.Now()),
 	}
 
@@ -52,7 +53,13 @@ func (f *FeedbackRepository) Read(userId string) ([]entries.Feedback, error) {
 
 	result := col.FindOne(context.TODO(), bson.M{"userId": id})
 
-	if err = result.Err(); err != nil {
+	err = result.Err()
+
+	if err == mongo.ErrNoDocuments {
+		return []entries.Feedback{}, nil
+	}
+
+	if err != nil {
 		return nil, err
 	}
 
@@ -71,6 +78,8 @@ func (f *FeedbackRepository) Read(userId string) ([]entries.Feedback, error) {
 			NewFeedback: entries.NewFeedback{
 				Message: it.Message,
 				Target:  it.ID.Hex(),
+				Id:      it.ID.Hex(),
+				Type:    it.Type,
 			},
 			CreationDate: it.CreationDate.Time(),
 		}

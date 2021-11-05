@@ -2,8 +2,11 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/LastSprint/GooodBack/api/auth/entries"
+	auth_errors "github.com/LastSprint/GooodBack/api/auth/errors"
+	"github.com/LastSprint/GooodBack/common"
 	"github.com/go-chi/chi/v5"
 	"golang.org/x/oauth2"
 	"log"
@@ -18,7 +21,7 @@ Contains OAuth 2.0 for Google implementation
 type OAuth2Provider interface {
 	// GetRedirectUrl have to return URL for first redirection from this service to third-party service
 	GetRedirectUrl() (*url.URL, error)
-	ExchangeAuthCode(string) (*oauth2.Token, error)
+	ExchangeAuthCode(code, redirectUrl string) (*oauth2.Token, error)
 	// GetUserID have to return user ID in terms of third party service.
 	// for example email or username (we don't care)
 	GetUserID(token *oauth2.Token) (string, error)
@@ -44,6 +47,7 @@ func (api *Api) Start(router chi.Router) {
 	router.Route("/auth", func(r chi.Router) {
 		r.Get("/thridparty/{provider}", api.handleThirdPartyAuthIntent)
 		r.Get("/thridparty/redirect", api.handleThirdPartyServiceCodeRedirect)
+		r.Post("/thirparty/code", api.handleThirdPartyCodeExchange)
 		r.Post("/thirparty/code", api.handleThirdPartyCodeExchange)
 
 		r.Post("/refresh", api.handleAccessTokenRefresh)
@@ -96,7 +100,7 @@ func (api *Api) handleThirdPartyServiceCodeRedirect(w http.ResponseWriter, r *ht
 
 	providerName := r.URL.Query().Get("state")
 
-	tokens, err := api.getUserTokens(code, providerName)
+	tokens, err := api.getUserTokens(code, providerName, "")
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -121,18 +125,31 @@ func (api *Api) handleThirdPartyCodeExchange(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	tokens, err := api.getUserTokens(entry.Code, entry.Provider)
+	tokens, err := api.getUserTokens(entry.Code, entry.Provider, entry.RedirectUrl)
+
+	if errors.Is(err, auth_errors.NotAllowedToLogin) {
+		http.Error(w, "You are not allowed to login 🧙‍️", http.StatusForbidden)
+		return
+	}
 
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	if err = json.NewEncoder(w).Encode(tokens); err != nil {
-		log.Printf("Can't serialize aouth tokens to JSON with error \"%s\"", err.Error())
-		http.Error(w, "Something went wrong", http.StatusInternalServerError)
+	if err = common.SetCookie(w, r, "Authorization", tokens.AccessToken, 60 * 60 * 24 * 30); err != nil {
+		log.Println("[ERR] Couldn't set cookie ->", err.Error())
+		http.Error(w, "something went wrong", http.StatusBadRequest)
 		return
 	}
+
+	if err = common.SetCookie(w, r, "Refreshing", tokens.RefreshToken, 60 * 60 * 24 * 30 * 12); err != nil {
+		log.Println("[ERR] Couldn't set cookie ->", err.Error())
+		http.Error(w, "something went wrong", http.StatusBadRequest)
+		return
+	}
+
+	fmt.Println(w.Header())
 }
 
 func (api *Api) handleAccessTokenRefresh(w http.ResponseWriter, r *http.Request) {
@@ -165,14 +182,14 @@ func (api *Api) handleAccessTokenRefresh(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func (api *Api) getUserTokens(oauth2Code, oauth2ProviderName string) (*oauth2.Token, error) {
+func (api *Api) getUserTokens(oauth2Code, oauth2ProviderName string, redirectUrl string) (*oauth2.Token, error) {
 	provider, ok := api.Providers[oauth2ProviderName]
 
 	if !ok {
 		return nil, fmt.Errorf("provider \"%s\" not found by name \"%s\"", provider, oauth2ProviderName)
 	}
 
-	token, err := provider.ExchangeAuthCode(oauth2Code)
+	token, err := provider.ExchangeAuthCode(oauth2Code, redirectUrl)
 
 	if err != nil {
 		log.Printf("[ERR] provider \"%s\" couldn't exchange code \"%s\" with err \"%s\"", oauth2ProviderName, oauth2Code, err.Error())
@@ -190,7 +207,7 @@ func (api *Api) getUserTokens(oauth2Code, oauth2ProviderName string) (*oauth2.To
 
 	if err != nil {
 		log.Printf("[ERR] couldn't get tokens for userId \"%s\" with error \"%s\"", thirdPartyUserId, err.Error())
-		return nil, fmt.Errorf("can't get tokens for user")
+		return nil, fmt.Errorf("can't get tokens for user %w", err)
 	}
 
 	return tokens, err

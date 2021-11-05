@@ -14,6 +14,29 @@ type UserRepo struct {
 	Client *mongo.Client
 }
 
+func (u *UserRepo) CheckIfUserAllowedToAuth(provider, userId string) (bool, error) {
+	col := u.Client.Database("feedback_auth").Collection("allowed_users")
+
+	search := col.FindOne(context.Background(), bson.M{
+		"providerId": provider,
+		"targets": bson.M{
+			"$in": bson.A{userId},
+		},
+	})
+
+	err := search.Err()
+
+	if errors.Is(err, mongo.ErrNoDocuments) {
+		return false, nil
+	}
+
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
 func (u *UserRepo) GetUserIdByTarget(target string) (string, error) {
 	col := u.Client.Database("feedback_auth").Collection("users")
 

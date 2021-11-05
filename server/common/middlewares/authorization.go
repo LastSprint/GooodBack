@@ -2,13 +2,21 @@ package middlewares
 
 import (
 	"context"
+	"fmt"
 	"github.com/LastSprint/GooodBack/common"
 	"github.com/golang-jwt/jwt/v4"
+	"log"
 	"net/http"
+	"time"
 )
+
+type TokenRefresher interface {
+	RefreshAccessToken(refreshTokenStr string) (string, error)
+}
 
 type AccessTokenValidatorMiddleware struct {
 	Key []byte
+	Refresher TokenRefresher
 }
 
 func (m *AccessTokenValidatorMiddleware) ExtractToken(next http.Handler) http.Handler {
@@ -18,6 +26,7 @@ func (m *AccessTokenValidatorMiddleware) ExtractToken(next http.Handler) http.Ha
 
 		if len(token) == 0 {
 			cookie, err := r.Cookie("Authorization")
+			fmt.Println(r.Cookies())
 
 			if err != nil {
 				next.ServeHTTP(w, r)
@@ -39,9 +48,44 @@ func (m *AccessTokenValidatorMiddleware) ExtractToken(next http.Handler) http.Ha
 
 		ctx = context.WithValue(ctx, ContextKeyUserId, claims.ID)
 
-		ctx = context.WithValue(ctx, "access_token_is_valid", err == nil)
+		if err == nil {
+			ctx = context.WithValue(ctx, "access_token_is_valid", true)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
 
+		if !claims.VerifyIssuedAt(time.Now(), true) {
+			ctx = context.WithValue(ctx, "access_token_is_valid", false)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+
+		cookie, err := r.Cookie("Refreshing")
+
+		if err != nil || len(cookie.Value) == 0 {
+			ctx = context.WithValue(ctx, "access_token_is_valid", false)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+
+		newAccessToken, err := m.Refresher.RefreshAccessToken(cookie.Value)
+
+		if err != nil {
+			ctx = context.WithValue(ctx, "access_token_is_valid", false)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+
+		if err = common.SetCookie(w, r, "Authorization", newAccessToken, 60 * 60 * 24 * 30); err != nil {
+			log.Println("[ERR] Couldn't update auth cookie ->", err.Error())
+			ctx = context.WithValue(ctx, "access_token_is_valid", false)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		}
+
+		ctx = context.WithValue(ctx, "access_token", token)
+		ctx = context.WithValue(ctx, "access_token_is_valid", true)
 		next.ServeHTTP(w, r.WithContext(ctx))
+		return
 	})
 }
 

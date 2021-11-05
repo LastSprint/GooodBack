@@ -38,13 +38,17 @@ func (g *GoogleOAuth2Provider) GetRedirectUrl() (*url.URL, error) {
 	return result, nil
 }
 
-func (g *GoogleOAuth2Provider) ExchangeAuthCode(code string) (*oauth2.Token, error) {
+func (g *GoogleOAuth2Provider) ExchangeAuthCode(code, redirectUrl string) (*oauth2.Token, error) {
 	requestBody := url.Values{}
+
+	if len(redirectUrl) == 0 {
+		redirectUrl = g.ThisServerRedirectURL
+	}
 
 	requestBody.Add("code", code)
 	requestBody.Add("client_id", g.ClientId)
 	requestBody.Add("client_secret", g.ClientSecret)
-	requestBody.Add("redirect_uri", g.ThisServerRedirectURL)
+	requestBody.Add("redirect_uri", redirectUrl)
 	requestBody.Add("grant_type", "authorization_code")
 
 	response, err := http.PostForm("https://oauth2.googleapis.com/token", requestBody)

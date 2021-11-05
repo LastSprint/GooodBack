@@ -4,6 +4,7 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"github.com/LastSprint/GooodBack/api/auth/entities"
+	"github.com/LastSprint/GooodBack/api/auth/errors"
 	"github.com/LastSprint/GooodBack/common"
 	"github.com/golang-jwt/jwt/v4"
 	"golang.org/x/oauth2"
@@ -15,6 +16,8 @@ type UserRepo interface {
 	CreateUser(userOauthId, authProvider string) (*entities.UserInfo, error)
 
 	SetRefreshTokenForUser(userId, token string) error
+
+	CheckIfUserAllowedToAuth(provider, userId string) (bool, error)
 }
 
 type UserService struct {
@@ -47,6 +50,17 @@ func InitUserService(repo UserRepo, accessTokenKey, refreshTokenPublicKey, refre
 }
 
 func (u *UserService) GetTokens(userId string, provider string) (*oauth2.Token, error) {
+
+	allowed, err := u.Repo.CheckIfUserAllowedToAuth(provider, userId);
+
+	if err != nil {
+		return nil, fmt.Errorf("couldn't check if user is allowed to login -> %w", err)
+	}
+
+	if !allowed {
+		return nil, errors.NotAllowedToLogin
+	}
+
 	user, err := u.Repo.GetUserById(userId, provider)
 
 	if err != nil {

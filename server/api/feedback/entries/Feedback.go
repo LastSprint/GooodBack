@@ -14,7 +14,7 @@ func (f FeedbackSortable) Len() int {
 }
 
 func (f FeedbackSortable) Less(i, j int) bool {
-	return f[i].CreationDate.Before(f[j].CreationDate)
+	return f[i].CreationDate.After(f[j].CreationDate)
 }
 
 func (f FeedbackSortable) Swap(i, j int) {

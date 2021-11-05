@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/LastSprint/GooodBack/api/feedback/entries"
+	"github.com/LastSprint/GooodBack/common"
 	"github.com/LastSprint/GooodBack/common/middlewares"
 	"github.com/go-chi/chi/v5"
 	"log"
@@ -30,14 +31,15 @@ func (a *Api) handleCreateFeedback(w http.ResponseWriter, r *http.Request) {
 	entry := entries.NewFeedback{}
 
 	if err := json.NewDecoder(r.Body).Decode(&entry); err != nil {
+		log.Println("[ERR] couldn't parse request handleCreateFeedback ->", err.Error())
 		http.Error(w, "couldn't parse request", http.StatusBadRequest)
 		return
 	}
 
 	err := a.Srv.Write(entry)
 
-	if errors.Is(err, FeedbackTargetNotFound) {
-		http.Error(w, "target not found", http.StatusNotFound)
+	if errors.Is(err, common.NotFound) {
+		http.Error(w, "feedback target not found", http.StatusNotFound)
 		return
 	}
 

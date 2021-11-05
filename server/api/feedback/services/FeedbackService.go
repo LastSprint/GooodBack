@@ -11,7 +11,7 @@ type UserRepository interface {
 }
 
 type Repository interface {
-	CreateNew(message, userID string) error
+	CreateNew(message, userID string, score int) error
 	Read(userID string) ([]entries.Feedback, error)
 }
 
@@ -29,7 +29,11 @@ func (f *FeedbackService) Write(feedback entries.NewFeedback) error {
 		return common.NotFound
 	}
 
-	if err = f.Repo.CreateNew(feedback.Message, id); err != nil {
+	if len(id) == 0 {
+		return common.NotFound
+	}
+
+	if err = f.Repo.CreateNew(feedback.Message, id, feedback.Type); err != nil {
 		log.Printf("[ERR] couldn't create feedback with error %s", err.Error())
 	}
 
