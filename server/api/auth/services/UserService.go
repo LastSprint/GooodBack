@@ -32,13 +32,13 @@ func InitUserService(repo UserRepo, accessTokenKey, refreshTokenPublicKey, refre
 	privateKey, err := jwt.ParseECPrivateKeyFromPEM(refreshTokenPrivateKey)
 
 	if err != nil {
-		return nil, fmt.Errorf("couldn't parse private ley %w", err)
+		return nil, fmt.Errorf("couldn't parse private key %w", err)
 	}
 
 	publicKey, err := jwt.ParseECPublicKeyFromPEM(refreshTokenPublicKey)
 
 	if err != nil {
-		return nil, fmt.Errorf("couldn't parse public ley %w", err)
+		return nil, fmt.Errorf("couldn't parse public key %w", err)
 	}
 
 	return &UserService{
@@ -51,7 +51,7 @@ func InitUserService(repo UserRepo, accessTokenKey, refreshTokenPublicKey, refre
 
 func (u *UserService) GetTokens(userId string, provider string) (*oauth2.Token, error) {
 
-	allowed, err := u.Repo.CheckIfUserAllowedToAuth(provider, userId);
+	allowed, err := u.Repo.CheckIfUserAllowedToAuth(provider, userId)
 
 	if err != nil {
 		return nil, fmt.Errorf("couldn't check if user is allowed to login -> %w", err)

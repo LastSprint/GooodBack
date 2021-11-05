@@ -6,6 +6,7 @@ import (
 	"github.com/LastSprint/GooodBack/api/auth"
 	"github.com/LastSprint/GooodBack/api/auth/repos"
 	"github.com/LastSprint/GooodBack/api/feedback"
+	"github.com/LastSprint/GooodBack/api/slack"
 	"github.com/LastSprint/GooodBack/common/middlewares"
 	"github.com/LastSprint/GooodBack/oauth/providers"
 	"github.com/caarlos0/env/v6"
@@ -14,9 +15,9 @@ import (
 	"github.com/go-chi/cors"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"io/ioutil"
 	"log"
 	"net/http"
+	"strings"
 )
 
 type config struct {
@@ -27,10 +28,12 @@ type config struct {
 	GoogleClientSecret string `env:"GOOGLE_CLIENT_SECRET,unset"`
 
 	JwtAccessTokenSeed        string `env:"JWT_ACCESS_TOKEN_SEED,unset"`
-	JwtRefreshTokenPublicKey  string `env:"JWT_REFRESH_TOKEN_PUBLIC_KEY_PATH,unset"`
-	JwtRefreshTokenPrivateKey string `env:"JWT_REFRESH_TOKEN_PRIVATE_KEY_PATH,unset"`
+	JwtRefreshTokenPublicKey  string `env:"JWT_REFRESH_TOKEN_PUBLIC_KEY,unset"`
+	JwtRefreshTokenPrivateKey string `env:"JWT_REFRESH_TOKEN_PRIVATE_KEY,unset"`
 
 	AppDataMongoDbConnectionString string `env:"APP_DATA_MONGO_CONNECTION_STRING,unset" envDefault:"mongodb://root:root@localhost:6645"`
+
+	SlackToken string `env:"SLACK_TOKEN,unset"`
 }
 
 func main() {
@@ -42,17 +45,8 @@ func main() {
 		return
 	}
 
-	pubKey, err := ioutil.ReadFile(cfg.JwtRefreshTokenPublicKey)
-
-	if err != nil {
-		log.Fatalf("Couldn't read refresh token public key")
-	}
-
-	prKey, err := ioutil.ReadFile(cfg.JwtRefreshTokenPrivateKey)
-
-	if err != nil {
-		log.Fatalf("Couldn't read refresh token private key")
-	}
+	pubKey := []byte(strings.ReplaceAll(cfg.JwtRefreshTokenPublicKey, "\\n", "\n"))
+	prKey := []byte(strings.ReplaceAll(cfg.JwtRefreshTokenPrivateKey, "\\n", "\n"))
 
 	provs := map[string]auth.OAuth2Provider{
 		auth.GoogleOAuthProvider: &providers.GoogleOAuth2Provider{
@@ -97,9 +91,12 @@ func main() {
 	mdlw := &middlewares.AccessTokenValidatorMiddleware{Key: access}
 	r.Use(mdlw.ExtractToken)
 
+	slackApi := slack.AssembleSlackApi(client, userRepo, cfg.SlackToken)
+
 	r.Route(cfg.BasePath, func(r chi.Router) {
 		authApi.Start(r)
 		feedbackApi.Start(r)
+		slackApi.Start(r)
 	})
 
 	log.Fatalln(http.ListenAndServe(":80", r))

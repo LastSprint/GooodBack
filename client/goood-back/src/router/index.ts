@@ -15,6 +15,11 @@ const routes: Array<RouteConfig> = [
     component: Login
   },
   {
+    path: '/to/:target',
+    name: 'FeedbackFormWithTarget',
+    component: SendFeedback
+  },
+  {
     path: global.REDIRECT_PATH,
     name: 'AuthInProcess',
     component: AuthInProcess

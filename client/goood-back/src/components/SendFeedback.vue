@@ -85,7 +85,7 @@ export default class SendFeedback extends Vue {
     isError = false
     errorMessage = ""
 
-    isSuccess = true
+    isSuccess = false
 
     created () {
         this.$vs.setColor('gray-2', '#212529')
@@ -93,10 +93,10 @@ export default class SendFeedback extends Vue {
         this.$vs.setColor('gray-3', '#212529')
         this.$vs.setColor('background', '#212529')
         this.$vs.setColor('text', '#e9ecef')
-    }
 
-    onAlertClick (): void {
-        this.isError = false
+        if (this.$router.currentRoute.params.target) {
+            this.email = this.$router.currentRoute.params.target + '@surfstudio.ru'
+        }
     }
 
     send (): void {
@@ -125,7 +125,7 @@ export default class SendFeedback extends Vue {
         const srv = new FeedbackService()
         this.formWasSent = true
         srv.send(new NewFeedback(this.message, parseInt(`${this.value}`), this.email)).then((response) => {
-            window.alert('Success')
+            this.isSuccess = true
         }).catch((error) => {
                 if (error.response) {
                     this.errorMessage = `Error: ${error.response.data}`
