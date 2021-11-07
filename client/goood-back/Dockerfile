@@ -20,9 +20,6 @@ RUN rm .env
 # build app for production with minification
 RUN npm run build
 
-EXPOSE 8080
-CMD [ "http-server", "dist" ]
-
 FROM arm64v8/nginx:stable-alpine
 COPY --from=builder /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf

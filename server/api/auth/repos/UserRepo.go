@@ -8,6 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"log"
 )
 
 type UserRepo struct {
@@ -38,7 +39,16 @@ func (u *UserRepo) CheckIfUserAllowedToAuth(provider, userId string) (bool, erro
 }
 
 func (u *UserRepo) GetUserIdByTarget(target string) (string, error) {
-	col := u.Client.Database("feedback_auth").Collection("users")
+
+	log.Println("$$ client", u.Client)
+
+	db := u.Client.Database("feedback_auth")
+
+	log.Println("$$ db", db)
+
+	col := db.Collection("users")
+
+	log.Println("$$ Col", col)
 
 	search := col.FindOne(context.Background(), bson.M{
 		"third_party_id": target,

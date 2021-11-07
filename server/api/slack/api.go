@@ -1,26 +1,27 @@
 package slack
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"github.com/LastSprint/GooodBack/api/feedback/entries"
-	"github.com/LastSprint/GooodBack/common"
+	slackErrors "github.com/LastSprint/GooodBack/api/slack/errors"
 	"github.com/go-chi/chi/v5"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"strconv"
+	"net/url"
 )
 
-type FeedbackService interface {
-	Write(feedback entries.NewFeedback) error
+type CommandHandler interface {
+	Handle(input url.Values) error
+}
+
+type WebhookHandler interface {
+	Handle(payload string) error
 }
 
 type Api struct {
-	Srv        FeedbackService
-	SlackToken string
+	CmdHandler         CommandHandler
+	InteractionHandler WebhookHandler
 }
 
 func (a *Api) Start(r chi.Router) {
@@ -39,12 +40,9 @@ func (a *Api) handleFeedbackCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Println("handleFeedbackCommand")
-
-	fmt.Println(r.FormValue("payload"))
-
-	if err := a.sendFeedbackForm(r.FormValue("trigger_id")); err != nil {
-		log.Println("[ERR] Couldn't send form to slack ->", err.Error())
+	if err := a.CmdHandler.Handle(r.Form); err != nil {
+		log.Println("[ERR] handleFeedbackCommand ->", err.Error())
+		http.Error(w, "cant handle feedback command", http.StatusBadRequest)
 	}
 }
 
@@ -58,285 +56,32 @@ func (a *Api) handleInteractivityWebhook(w http.ResponseWriter, r *http.Request)
 
 	rawPayload := r.Form.Get("payload")
 
-	fmt.Println(r.Form)
-
-	payload := struct {
-		Type       string `json:"type"`
-		CallbackId string `json:"callback_id"`
-		TriggerId  string `json:"trigger_id"`
-		View       struct {
-			CallbackId string `json:"callback_id"`
-			State      struct {
-				Values map[string]interface{} `json:"values"`
-			} `json:"state"`
-		} `json:"view"`
-	}{}
-
-	if err := json.Unmarshal([]byte(rawPayload), &payload); err != nil {
-		log.Println("[ERR] Can't parse payload as json ->", err.Error())
-		http.Error(w, "Can't parse payload", http.StatusBadRequest)
+	if len(rawPayload) != 0 {
+		log.Println("[ERR] payload is null Request:", r.URL.String())
 		return
 	}
 
-	switch payload.Type {
-	case "view_submission":
-		if payload.View.CallbackId == "feedback-form" {
-			if err := a.handleViewSubmission(payload.View.State.Values, w); err != nil {
-				log.Println("[ERR] can't handle view submission ->", err.Error())
-			}
-		}
-	}
-}
+	err := a.InteractionHandler.Handle(rawPayload)
 
-func (a *Api) handleViewSubmission(form map[string]interface{}, w http.ResponseWriter) error {
-
-	// im sorry for that
-	// feedback_form_type -> type -> selected_option -> value
-
-	typeObj, ok := form["feedback_form_type"].(map[string]interface{})
-
-	if !ok {
-		sendError(w, "Can't read field", "feedback_form_type")
-		return fmt.Errorf("can't read reaction type")
+	if err == nil {
+		return
 	}
 
-	typeObj, ok = typeObj["type"].(map[string]interface{})
+	log.Printf("[ERR] when handling interaction %s -> %s\n", r.URL.String(), err.Error())
 
-	if !ok {
-		sendError(w, "Can't read field", "feedback_form_type")
-		return fmt.Errorf("can't read reaction type")
+	var slackErr *slackErrors.SlackViewSubmissionError
+
+	if errors.As(err, &slackErr) {
+		sendError(w, slackErr.Key, slackErr.Value)
+		return
 	}
 
-	typeObj, ok = typeObj["selected_option"].(map[string]interface{})
-
-	if !ok {
-		sendError(w, "Can't read field", "feedback_form_type")
-		return fmt.Errorf("can't read reaction type")
-	}
-
-	typeRawVal, ok := typeObj["value"].(string)
-
-	if !ok {
-		sendError(w, "Can't read field", "feedback_form_type")
-		return fmt.Errorf("can't read reaction type")
-	}
-
-	typeVal, err := strconv.Atoi(typeRawVal)
-
-	if err != nil {
-		sendError(w, "Can't read field", "feedback_form_type")
-		return fmt.Errorf("can't read reaction type -> %w", err)
-	}
-
-	// feedback_form_target -> target -> value
-
-	target, ok := form["feedback_form_target"].(map[string]interface{})
-
-	if !ok {
-		sendError(w, "Can't read field", "feedback_form_target")
-		return fmt.Errorf("can't read target")
-	}
-
-	target, ok = target["target"].(map[string]interface{})
-
-	if !ok {
-		sendError(w, "Can't read field", "feedback_form_target")
-		return fmt.Errorf("can't read target")
-	}
-
-	targetVal, ok := target["value"].(string)
-
-	if !ok {
-		sendError(w, "Can't read field", "feedback_form_target")
-		return fmt.Errorf("can't read target")
-	}
-
-	// feedback_form_message -> message -> value
-
-	message, ok := form["feedback_form_message"].(map[string]interface{})
-
-	if !ok {
-		sendError(w, "Can't read field", "feedback_form_message")
-		return fmt.Errorf("can't read message")
-	}
-
-	message, ok = message["message"].(map[string]interface{})
-
-	if !ok {
-		sendError(w, "Can't read field", "feedback_form_message")
-		return fmt.Errorf("can't read message")
-	}
-
-	messageVal, ok := message["value"].(string)
-
-	if !ok {
-		sendError(w, "Can't read field", "feedback_form_message")
-		return fmt.Errorf("can't read message")
-	}
-
-	fmt.Println(typeVal, targetVal, messageVal)
-
-	err = a.Srv.Write(entries.NewFeedback{
-		Message: messageVal,
-		Target:  targetVal,
-		Type:    typeVal,
-	})
-
-	if errors.Is(err, common.NotFound) {
-		sendError(w, "User with this email not found", "feedback_form_target")
-		return err
-	}
-
-	if err != nil {
-		return fmt.Errorf("can't write feedback %w", err)
-	}
-
-	return nil
-}
-
-func (a *Api) sendFeedbackForm(triggerId string) error {
-
-	fmt.Println(triggerId)
-
-	dialogString := `{
-	"callback_id": "feedback-form",
-	"type": "modal",
-	"submit": {
-		"type": "plain_text",
-		"text": "Send",
-		"emoji": true
-	},
-	"close": {
-		"type": "plain_text",
-		"text": "Cancel",
-		"emoji": true
-	},
-	"title": {
-		"type": "plain_text",
-		"text": "GoodBack Form",
-		"emoji": true
-	},
-	"blocks": [
-		{
-			"block_id": "feedback_form_type",
-			"type": "input",
-			"label": {
-				"type": "plain_text",
-				"text": "Select the emotion",
-				"emoji": true
-			},
-			"element": {
-				"type": "static_select",
-				"action_id": "type",
-				"options": [
-					{
-						"text": {
-							"type": "plain_text",
-							"text": "🔥 cool",
-							"emoji": true
-						},
-						"value": "2"
-					},
-					{
-						"text": {
-							"type": "plain_text",
-							"text": "👍 good",
-							"emoji": true
-						},
-						"value": "0"
-					},
-					{
-						"text": {
-							"type": "plain_text",
-							"text": "👎 not so good",
-							"emoji": true
-						},
-						"value": "1"
-					},
-					{
-						"text": {
-							"type": "plain_text",
-							"text": "🤬 awfull",
-							"emoji": true
-						},
-						"value": "3"
-					}
-				]
-			}
-		},
-		{
-			"block_id": "feedback_form_target",
-			"type": "input",
-			"label": {
-				"type": "plain_text",
-				"text": "Target",
-				"emoji": true
-			},
-			"element": {
-				"action_id": "target",
-				"type": "plain_text_input",
-				"multiline": false,
-				"placeholder": {
-					"type": "plain_text",
-					"text": "email@surfstudio.ru"
-				}
-			}
-		},
-		{
-			"block_id": "feedback_form_message",
-			"type": "input",
-			"label": {
-				"type": "plain_text",
-				"text": "Message",
-				"emoji": true
-			},
-			"element": {
-				"action_id": "message",
-				"type": "plain_text_input",
-				"multiline": true
-			}
-		}
-	]
-}`
-
-	requestData := map[string]interface{}{
-		"trigger_id": triggerId,
-		"view":       dialogString,
-	}
-
-	requestPayload, err := json.Marshal(requestData)
-
-	if err != nil {
-		return err
-	}
-
-	request, err := http.NewRequest(http.MethodPost, "https://slack.com/api/views.open", bytes.NewBuffer(requestPayload))
-
-	if err != nil {
-		return err
-	}
-
-	request.Header.Set("Authorization", "Bearer "+a.SlackToken)
-	request.Header.Set("Content-type", "application/json")
-
-	response, err := http.DefaultClient.Do(request)
-
-	if err != nil {
-		return err
-	}
-
-	_, err = ioutil.ReadAll(response.Body)
-
-	if err != nil {
-		return err
-	}
-
-	return nil
+	http.Error(w, "something went wrong", http.StatusInternalServerError)
 }
 
 func sendError(w http.ResponseWriter, text, key string) {
 	w.Header().Add("Content-Type", "application/json")
-	//w.WriteHeader(http.StatusBadRequest)
+
 	object := struct {
 		ResponseAction string            `json:"response_action"`
 		Errors         map[string]string `json:"errors"`

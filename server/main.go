@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"github.com/LastSprint/GooodBack/api/auth"
 	"github.com/LastSprint/GooodBack/api/auth/repos"
 	"github.com/LastSprint/GooodBack/api/feedback"
@@ -45,6 +46,13 @@ func main() {
 		return
 	}
 
+	cfg.GoogleClientId = strings.TrimSpace(cfg.GoogleClientId)
+	cfg.GoogleClientSecret = strings.TrimSpace(cfg.GoogleClientSecret)
+	cfg.SlackToken = strings.TrimSpace(cfg.SlackToken)
+	cfg.AppDataMongoDbConnectionString = strings.TrimSpace(cfg.AppDataMongoDbConnectionString)
+
+	fmt.Println(cfg)
+
 	pubKey := []byte(strings.ReplaceAll(cfg.JwtRefreshTokenPublicKey, "\\n", "\n"))
 	prKey := []byte(strings.ReplaceAll(cfg.JwtRefreshTokenPrivateKey, "\\n", "\n"))
 
@@ -64,6 +72,11 @@ func main() {
 	}
 
 	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(cfg.AppDataMongoDbConnectionString))
+
+	if err != nil {
+		log.Fatalln("[ERR] Can't connect to mongodb ->", err.Error())
+		return
+	}
 
 	userRepo := &repos.UserRepo{Client: client}
 
