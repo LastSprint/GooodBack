@@ -73,7 +73,7 @@ func (a *Api) handleInteractivityWebhook(w http.ResponseWriter, r *http.Request)
 	var slackErr *slackErrors.SlackViewSubmissionError
 
 	if errors.As(err, &slackErr) {
-		sendError(w, slackErr.Key, slackErr.Value)
+		sendError(w, slackErr.Value, slackErr.Key)
 		return
 	}
 
@@ -81,6 +81,7 @@ func (a *Api) handleInteractivityWebhook(w http.ResponseWriter, r *http.Request)
 }
 
 func sendError(w http.ResponseWriter, text, key string) {
+
 	w.Header().Add("Content-Type", "application/json")
 
 	object := struct {
