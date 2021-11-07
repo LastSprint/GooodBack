@@ -2,9 +2,11 @@ package services
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/LastSprint/GooodBack/api/feedback/entries"
-	"github.com/LastSprint/GooodBack/api/slack/errors"
+	slackErrors "github.com/LastSprint/GooodBack/api/slack/errors"
+	"github.com/LastSprint/GooodBack/common"
 	"strconv"
 )
 
@@ -42,9 +44,19 @@ func (s *SlackInteractivityWebHandler) Handle(rawPayload string) error {
 				return fmt.Errorf("can't handle view submission -> %w", err)
 			}
 
-			if err = s.FeedbackSrv.Write(*feedback); err != nil {
+			err = s.FeedbackSrv.Write(*feedback)
+
+			if errors.Is(err, common.NotFound) {
+				return &slackErrors.SlackViewSubmissionError{
+					Key:   "feedback_form_target",
+					Value: "User with this email wasn't found",
+				}
+			}
+
+			if err != nil {
 				return fmt.Errorf("couldn't write feedback %v -> %w", feedback, err)
 			}
+
 		}
 	default:
 		return fmt.Errorf("payload with type %s is not supported", payload.Type)
@@ -61,7 +73,7 @@ func (s *SlackInteractivityWebHandler) handleViewSubmission(form map[string]inte
 	typeObj, ok := form["feedback_form_type"].(map[string]interface{})
 
 	if !ok {
-		return nil, &errors.SlackViewSubmissionError{
+		return nil, &slackErrors.SlackViewSubmissionError{
 			Key:   "feedback_form_type",
 			Value: "Can't read field",
 		}
@@ -70,7 +82,7 @@ func (s *SlackInteractivityWebHandler) handleViewSubmission(form map[string]inte
 	typeObj, ok = typeObj["type"].(map[string]interface{})
 
 	if !ok {
-		return nil, &errors.SlackViewSubmissionError{
+		return nil, &slackErrors.SlackViewSubmissionError{
 			Key:   "feedback_form_type",
 			Value: "Can't read reaction type",
 		}
@@ -79,7 +91,7 @@ func (s *SlackInteractivityWebHandler) handleViewSubmission(form map[string]inte
 	typeObj, ok = typeObj["selected_option"].(map[string]interface{})
 
 	if !ok {
-		return nil, &errors.SlackViewSubmissionError{
+		return nil, &slackErrors.SlackViewSubmissionError{
 			Key:   "feedback_form_type",
 			Value: "Can't read reaction type",
 		}
@@ -88,7 +100,7 @@ func (s *SlackInteractivityWebHandler) handleViewSubmission(form map[string]inte
 	typeRawVal, ok := typeObj["value"].(string)
 
 	if !ok {
-		return nil, &errors.SlackViewSubmissionError{
+		return nil, &slackErrors.SlackViewSubmissionError{
 			Key:   "feedback_form_type",
 			Value: "Can't read reaction type",
 		}
@@ -97,7 +109,7 @@ func (s *SlackInteractivityWebHandler) handleViewSubmission(form map[string]inte
 	typeVal, err := strconv.Atoi(typeRawVal)
 
 	if err != nil {
-		return nil, &errors.SlackViewSubmissionError{
+		return nil, &slackErrors.SlackViewSubmissionError{
 			Key:   "feedback_form_type",
 			Value: "Can't parse reaction type",
 		}
@@ -108,7 +120,7 @@ func (s *SlackInteractivityWebHandler) handleViewSubmission(form map[string]inte
 	target, ok := form["feedback_form_target"].(map[string]interface{})
 
 	if !ok {
-		return nil, &errors.SlackViewSubmissionError{
+		return nil, &slackErrors.SlackViewSubmissionError{
 			Key:   "feedback_form_target",
 			Value: "Can't read field",
 		}
@@ -117,7 +129,7 @@ func (s *SlackInteractivityWebHandler) handleViewSubmission(form map[string]inte
 	target, ok = target["target"].(map[string]interface{})
 
 	if !ok {
-		return nil, &errors.SlackViewSubmissionError{
+		return nil, &slackErrors.SlackViewSubmissionError{
 			Key:   "feedback_form_target",
 			Value: "Can't read target",
 		}
@@ -126,7 +138,7 @@ func (s *SlackInteractivityWebHandler) handleViewSubmission(form map[string]inte
 	targetVal, ok := target["value"].(string)
 
 	if !ok {
-		return nil, &errors.SlackViewSubmissionError{
+		return nil, &slackErrors.SlackViewSubmissionError{
 			Key:   "feedback_form_target",
 			Value: "Can't read target",
 		}
@@ -137,7 +149,7 @@ func (s *SlackInteractivityWebHandler) handleViewSubmission(form map[string]inte
 	message, ok := form["feedback_form_message"].(map[string]interface{})
 
 	if !ok {
-		return nil, &errors.SlackViewSubmissionError{
+		return nil, &slackErrors.SlackViewSubmissionError{
 			Key:   "feedback_form_message",
 			Value: "Can't read field",
 		}
@@ -146,7 +158,7 @@ func (s *SlackInteractivityWebHandler) handleViewSubmission(form map[string]inte
 	message, ok = message["message"].(map[string]interface{})
 
 	if !ok {
-		return nil, &errors.SlackViewSubmissionError{
+		return nil, &slackErrors.SlackViewSubmissionError{
 			Key:   "feedback_form_message",
 			Value: "Can't read feedback_form_message.message",
 		}
@@ -155,7 +167,7 @@ func (s *SlackInteractivityWebHandler) handleViewSubmission(form map[string]inte
 	messageVal, ok := message["value"].(string)
 
 	if !ok {
-		return nil, &errors.SlackViewSubmissionError{
+		return nil, &slackErrors.SlackViewSubmissionError{
 			Key:   "feedback_form_message",
 			Value: "Can't read read feedback_form_message.message.value as string",
 		}
