@@ -56,8 +56,9 @@ func (a *Api) handleInteractivityWebhook(w http.ResponseWriter, r *http.Request)
 
 	rawPayload := r.Form.Get("payload")
 
-	if len(rawPayload) != 0 {
+	if len(rawPayload) == 0 {
 		log.Println("[ERR] payload is null Request:", r.URL.String())
+		http.Error(w, "Payload is empty", http.StatusBadRequest)
 		return
 	}
 
